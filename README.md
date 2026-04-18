@@ -1,155 +1,115 @@
-# PING-PONG
-full code 
-import pygame
-import sys
-import random
+# pong_simple.py — упрощенная версия
+import pygame, random, sys
 
-# Инициализация pygame
 pygame.init()
+pygame.mixer.init()
 
-# Константы
-WIDTH, HEIGHT = 800, 600
-PADDLE_W, PADDLE_H = 15, 100
-BALL_SIZE = 15
-PADDLE_SPEED = 7
-BALL_SPEED = 5
-BOT_SPEED = 5.5  # Скорость бота (чуть ниже игрока для баланса)
-WHITE = (255, 255, 255)
-BLACK = (0, 0, 0)
-GRAY = (120, 120, 120)
-
-# Создание окна
-screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Пинг-Понг")
+W, H = 800, 600
+screen = pygame.display.set_mode((W, H))
+pygame.display.set_caption("Pong")
 clock = pygame.time.Clock()
-font = pygame.font.SysFont(None, 60)
-small_font = pygame.font.SysFont(None, 40)
+font = pygame.font.Font(None, 74)
 
-# Инициализация объектов
-left_paddle = pygame.Rect(20, HEIGHT // 2 - PADDLE_H // 2, PADDLE_W, PADDLE_H)
-right_paddle = pygame.Rect(WIDTH - 20 - PADDLE_W, HEIGHT // 2 - PADDLE_H // 2, PADDLE_W, PADDLE_H)
-ball = pygame.Rect(WIDTH // 2 - BALL_SIZE // 2, HEIGHT // 2 - BALL_SIZE // 2, BALL_SIZE, BALL_SIZE)
+WHITE, BLACK = (255, 255, 255), (0, 0, 0)
 
-ball_dx = BALL_SPEED
-ball_dy = BALL_SPEED
-left_score = 0
-right_score = 0
+# Простой звук (короткий писк)
+bounce_sound = pygame.mixer.Sound(buffer=bytes([int(x*127+128) for x in [0]*1000 + [1]*500 + [0]*1000]))
 
+# Простое изображение шарика (белый круг)
+ball_img = pygame.Surface((25, 25))
+ball_img.fill(BLACK)
+pygame.draw.circle(ball_img, WHITE, (12, 12), 12)
+
+# Ракетки
+paddle_w, paddle_h = 15, 100
+left = pygame.Rect(20, H//2-50, paddle_w, paddle_h)
+right = pygame.Rect(W-35, H//2-50, paddle_w, paddle_h)
+ball = pygame.Rect(W//2-12, H//2-12, 25, 25)
+
+# Параметры
+ball_vx, ball_vy = 5, 5
+paddle_speed = 7
+score_l = score_r = 0
 game_mode = None  # "2p" или "bot"
-menu_active = True
 
 def reset_ball():
-    global ball_dx, ball_dy
-    ball.center = (WIDTH // 2, HEIGHT // 2)
-    ball_dx = -ball_dx  # Меняем направление подачи
-    ball_dy = BALL_SPEED * (1 if random.random() > 0.5 else -1)
+    global ball_vx, ball_vy
+    ball.center = (W//2, H//2)
+    ball_vx = -ball_vx
+    ball_vy = random.choice([-5, 5])
 
-# Игровой цикл
+# Меню
+in_menu = True
+while in_menu:
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            pygame.quit()
+            sys.exit()
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_1:
+                game_mode, in_menu = "2p", False
+            elif event.key == pygame.K_2:
+                game_mode, in_menu = "bot", False
+    
+    screen.fill(BLACK)
+    screen.blit(font.render("PONG", True, WHITE), (W//2-70, 150))
+    screen.blit(font.render("1 - 2 Players", True, WHITE), (W//2-120, 300))
+    screen.blit(font.render("2 - vs Bot", True, WHITE), (W//2-100, 380))
+    pygame.display.flip()
+    clock.tick(60)
+
+# Основная игра
 while True:
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             pygame.quit()
             sys.exit()
-
-        # Обработка ввода в меню
-        if menu_active and event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_1:
-                game_mode = "2p"
-                menu_active = False
-            elif event.key == pygame.K_2:
-                game_mode = "bot"
-                menu_active = False
-            elif event.key == pygame.K_ESCAPE:
-                pygame.quit()
-                sys.exit()
-
-    # === МЕНЮ ===
-    if menu_active:
-        screen.fill(BLACK)
-        title = font.render("ПИНГ-ПОНГ", True, WHITE)
-        opt1 = small_font.render("Нажми 1 - Игра вдвоем", True, WHITE)
-        opt2 = small_font.render("Нажми 2 - Игра с ботом", True, GRAY)
-        esc_text = small_font.render("ESC - Выход", True, GRAY)
-        
-        screen.blit(title, (WIDTH//2 - title.get_width()//2, HEIGHT//3))
-        screen.blit(opt1, (WIDTH//2 - opt1.get_width()//2, HEIGHT//2))
-        screen.blit(opt2, (WIDTH//2 - opt2.get_width()//2, HEIGHT//2 + 50))
-        screen.blit(esc_text, (WIDTH//2 - esc_text.get_width()//2, HEIGHT - 80))
-        
-        pygame.display.flip()
-        clock.tick(60)
-        continue
-
-    # === ИГРА ===
+    
+    # Управление
     keys = pygame.key.get_pressed()
-
-    # Левый игрок (всегда управляется клавиатурой)
-    if keys[pygame.K_w] and left_paddle.top > 0:
-        left_paddle.y -= PADDLE_SPEED
-    if keys[pygame.K_s] and left_paddle.bottom < HEIGHT:
-        left_paddle.y += PADDLE_SPEED
-
-    # Правая ракетка: игрок 2 или бот
+    if keys[pygame.K_w] and left.top > 0: left.y -= paddle_speed
+    if keys[pygame.K_s] and left.bottom < H: left.y += paddle_speed
+    
     if game_mode == "2p":
-        if keys[pygame.K_UP] and right_paddle.top > 0:
-            right_paddle.y -= PADDLE_SPEED
-        if keys[pygame.K_DOWN] and right_paddle.bottom < HEIGHT:
-            right_paddle.y += PADDLE_SPEED
-    elif game_mode == "bot":
-        # Логика бота
-        if right_paddle.centery < ball.centery - 10:
-            right_paddle.y += BOT_SPEED
-        elif right_paddle.centery > ball.centery + 10:
-            right_paddle.y -= BOT_SPEED
-        
-        # Ограничение выхода за экран
-        right_paddle.clamp_ip(pygame.Rect(0, 0, WIDTH, HEIGHT))
-
-    # Движение мяча
-    ball.x += ball_dx
-    ball.y += ball_dy
-
-    # Отскок от верха/низа
-    if ball.top <= 0 or ball.bottom >= HEIGHT:
-        ball_dy *= -1
-
-    # Отскок от ракеток
-    if ball.colliderect(left_paddle) or ball.colliderect(right_paddle):
-        ball_dx *= -1
-        # Коррекция позиции, чтобы мяч не "застревал"
-        if ball_dx > 0:
-            ball.left = right_paddle.left - ball.width
-        else:
-            ball.right = left_paddle.right
-
+        if keys[pygame.K_UP] and right.top > 0: right.y -= paddle_speed
+        if keys[pygame.K_DOWN] and right.bottom < H: right.y += paddle_speed
+    else:  # Bot
+        if right.centery < ball.centery: right.y += 5
+        if right.centery > ball.centery: right.y -= 5
+        right.y = max(0, min(H - paddle_h, right.y))
+    
+    # Движение шарика
+    ball.x += ball_vx
+    ball.y += ball_vy
+    
+    # Отскоки
+    if ball.top <= 0 or ball.bottom >= H:
+        ball_vy = -ball_vy
+        bounce_sound.play()
+    
+    if ball.colliderect(left) or ball.colliderect(right):
+        ball_vx = -ball_vx
+        bounce_sound.play()
+    
     # Голы
     if ball.left <= 0:
-        right_score += 1
+        score_r += 1
         reset_ball()
-    if ball.right >= WIDTH:
-        left_score += 1
+    if ball.right >= W:
+        score_l += 1
         reset_ball()
-
+    
     # Отрисовка
     screen.fill(BLACK)
-    pygame.draw.rect(screen, WHITE, left_paddle)
-    pygame.draw.rect(screen, WHITE, right_paddle)
-    pygame.draw.ellipse(screen, WHITE, ball)
+    pygame.draw.rect(screen, WHITE, left)
+    pygame.draw.rect(screen, WHITE, right)
+    screen.blit(ball_img, (ball.x, ball.y))
     
-    # Центральная линия
-    for y in range(0, HEIGHT, 30):
-        pygame.draw.line(screen, WHITE, (WIDTH // 2, y), (WIDTH // 2, y + 15))
-
-    # Счёт
-    left_text = font.render(str(left_score), True, WHITE)
-    right_text = font.render(str(right_score), True, WHITE)
-    screen.blit(left_text, (WIDTH // 4 - left_text.get_width() // 2, 20))
-    screen.blit(right_text, (3 * WIDTH // 4 - right_text.get_width() // 2, 20))
-
-    # Индикатор режима
-    mode_str = "Режим: 2 Игрока (W/S + ↑/↓)" if game_mode == "2p" else "Режим: vs Бот (W/S)"
-    mode_text = small_font.render(mode_str, True, GRAY)
-    screen.blit(mode_text, (WIDTH//2 - mode_text.get_width()//2, HEIGHT - 40))
-
+    # Линия и счет
+    for y in range(0, H, 40):
+        pygame.draw.line(screen, WHITE, (W//2, y), (W//2, y+20))
+    screen.blit(font.render(str(score_l), True, WHITE), (W//4, 20))
+    screen.blit(font.render(str(score_r), True, WHITE), (3*W//4, 20))
+    
     pygame.display.flip()
     clock.tick(60)
